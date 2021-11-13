@@ -1,0 +1,227 @@
+!pip install numpy
+!pip install pandas
+pip install -U scikit-learn
+
+# This Python 3 environment comes with many helpful analytics libraries installed
+# It is defined by the kaggle/python Docker image: https://github.com/kaggle/docker-python
+# For example, here's several helpful packages to load
+
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+
+# Input data files are available in the read-only "../input/" directory
+# For example, running this (by clicking run or pressing Shift+Enter) will list all files under the input directory
+
+import os
+for dirname, _, filenames in os.walk('/kaggle/input'):
+    for filename in filenames:
+        print(os.path.join(dirname, filename))
+
+# You can write up to 20GB to the current directory (/kaggle/working/) that gets preserved as output when you create a version using "Save & Run All" 
+# You can also write temporary files to /kaggle/temp/, but they won't be saved outside of the current session
+
+
+# read in the training set
+train = pd.read_csv("train.csv")
+
+# Check for negative labels: if negative, convert to 0+0
+train[train["gleason_score"] == "negative"]
+train["gleason_score"] = train["gleason_score"].apply(lambda x: "0+0" if x == "negative" else x)
+
+
+# Convert data into an array
+info = np.array(train)
+# Delete a bad row
+train.drop([7273],inplace=True)
+# Take the Gleason Score (4th column)
+labels = info[:,3]
+# Take the other 3 columns
+features = info[:, :3]
+
+X = features
+Y = labels
+
+from sklearn.model_selection import train_test_split
+
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size = 0.20, random_state = 42)
+
+
+
+
+X_train = pd.DataFrame(X_train, columns=["image_id", "data_provider", "isup_grade"])
+
+X_train
+
+'''
+X_train["gleason_score"] = Y_train
+
+X_test = pd.DataFrame(X_test, columns=["image_id", "data_provider", "isup_grade"])
+X_test["gleason_score"] = Y_test
+
+train_eda = X_train.groupby("gleason_score").count()["image_id"].reset_index().sort_values(by="image_id", ascending=False)
+train_eda.style.background_gradient(cmap="Greens")'''
+
+
+
+import plotly.express as px
+
+df = train_eda
+fig = px.pie(df, values='image_id', names='gleason_score')
+fig.show()
+
+
+X_train = pd.DataFrame(X_train, columns=["image_id", "data_provider", "isup_grade", "gleason_score"])
+X_test = pd.DataFrame(X_test, columns=["image_id", "data_provider", "isup_grade", "gleason_score"])
+
+X_train.to_csv("./training.csv")
+X_test.to_csv("./testing.csv")
+
+
+
+
+SIZE_IMG = 112
+N = 16
+def tile(img, mask):
+    result = []
+    shape = img.shape
+    pad0,pad1 = (SIZE_IMG - shape[0]%SIZE_IMG)%SIZE_IMG, (SIZE_IMG - shape[1]%SIZE_IMG)%SIZE_IMG
+    img = np.pad(img, [[pad0//2, pad0-pad0//2], [pad1//2, pad1 - pad1//2],[0,0]],
+                constant_values=255)
+    mask = np.pad(mask,[[pad0//2, pad0-pad0//2], [pad1//2,pad1-pad1//2], [0,0]],
+                constant_values=0)
+    img = img.reshape(img.shape[0]//SIZE_IMG, SIZE_IMG, img.shape[1]//SIZE_IMG,SIZE_IMG, 3)
+    img = img.transpose(0,2,1,3,4).reshape(-1, SIZE_IMG,SIZE_IMG,3)
+    mask = mask.reshape(mask.shape[0]//SIZE_IMG, SIZE_IMG,mask.shape[1]//SIZE_IMG, SIZE_IMG, 3)
+    mask = mask.transpose(0, 2, 1, 3, 4).reshape(-1, SIZE_IMG,SIZE_IMG, 3)
+    if len(img) < N:
+        mask = np.pad(mask, [[0, N-len(img)], [0, 0], [0, 0],[0, 0]], constant_values=0)
+        img = np.pad(img, [[0, N-len(img)],[0, 0],[0, 0], [0, 0]], constant_values=255)
+    idxs = np.argsort(img.reshape(img.shape[0], -1).sum(-1))[: N]
+    img = img[idxs]
+    mask = mask[idxs]
+    for i in range(len(img)):
+        result.append({'img':img[i], 'mask':mask[i], 'idx':i})
+    return result
+
+
+
+#************ UP UNTIL HERE IT WORKS!
+
+
+train_dataset = pd.read_csv("./training.csv", usecols=["image_id", "data_provider", "isup_grade", "gleason_score"])
+test_dataset = pd.read_csv("./testing.csv", usecols=["image_id", "data_provider", "isup_grade", "gleason_score"])
+
+f, ax = plt.subplots(4,4, figsize=(10, 10))
+
+# Mapping to the original dataset
+#img = skimage.io.MultiImage(os.path.join(tiffies, "0005f7aaab2800f6170c399693a96917"+'.tiff'))[1]
+img = skimage.io("tiffies/0005f7aaab2800f6170c399693a96917.tiff")[1]
+
+#mask = skimage.io.MultiImage(os.path.join(MASKS,"5801d2195cdcd8d336e8fc097c51a788"+'_mask.tiff'))[1]
+mask = skimage.io("masks/0005f7aaab2800f6170c399693a96917_mask.tiff")[1]
+
+tiles = tile(img, mask)
+for t in range(len(tiles)):
+    ax[t//4, t%4].imshow(tiles[t]["img"]) # Displaying Image    
+    ax[t//4, t%4].axis('off')   
+
+
+id_train = train_dataset["image_id"][163]
+id_test = test_dataset["image_id"][163]
+
+# Testing the function
+def concat_tile(im_list_2d):
+    return cv2.vconcat([cv2.hconcat(im_list_h) for im_list_h in im_list_2d])
+
+def mosaic(tiles):
+
+    im1 = tiles[0]["img"]
+    im2 = tiles[1]["img"]
+    im3 = tiles[2]["img"]
+    im4 = tiles[3]["img"]
+
+    im5 = tiles[4]["img"]
+    im6 = tiles[5]["img"]
+    im7 = tiles[6]["img"]
+    im8 = tiles[7]["img"]
+
+    im9 = tiles[8]["img"]
+    im10 = tiles[9]["img"]
+    im11 = tiles[10]["img"]
+    im12 = tiles[11]["img"]
+
+    im13 = tiles[12]["img"]
+    im14 = tiles[13]["img"]
+    im15 = tiles[14]["img"]
+    im16 = tiles[15]["img"]
+
+    im_tile = concat_tile([[im1, im2, im3, im4],
+                           [im5, im6, im7, im8],
+                           [im9, im10, im11, im12],
+                           [im13, im14, im15, im16]])
+    return im_tile
+
+
+img = skimage.io.MultiImage(os.path.join(TRAIN, f"{id_train}.tiff"))[1]
+mask = skimage.io.MultiImage(os.path.join(MASKS, f"{id_train}_mask.tiff"))[1]
+tiles = tile(img, mask)
+
+mosaic_img = mosaic(tiles)
+plt.title(f"ID: {id_train}")
+plt.imshow(mosaic_img)
+
+
+train_IDs = train_dataset["image_id"]
+test_IDs = test_dataset["image_id"]
+
+not_found_train = []
+not_found_test = []
+
+def generate_dataset(ids, train=True):
+    if train:
+        x_tot,x2_tot = [], []
+        with zipfile.ZipFile(OUT_TRAIN, 'w') as img_out,\
+         zipfile.ZipFile(OUT_MASKS_TRAIN, 'w') as mask_out:
+            for gleason_score, id in enumerate(tqdm(ids)):
+                try:
+                    img = skimage.io.MultiImage(os.path.join(TRAIN,id+'.tiff'))[1]
+                    mask = skimage.io.MultiImage(os.path.join(MASKS,id+'_mask.tiff'))[1]
+                    tiles = tile(img,mask)                    
+                    img = mosaic(tiles)
+                    
+                    x_tot.append((img/255.0).reshape(-1,3).mean(0))
+                    x2_tot.append(((img/255.0)**2).reshape(-1,3).mean(0))
+                    # If read with PIL RGB turns into BGR
+                    img = cv2.imencode('.png',cv2.cvtColor(img, cv2.COLOR_RGB2BGR))[1]
+                    # Uncomment to classify by ISUP GRADE 
+                    # img_out.writestr(f'train/ISUP_GRADE_{train_dataset["isup_grade"][isup_grade]}/{id}_{idx}.png', img)
+                    img_out.writestr(f'train/GLEASON_SCORE_{train_dataset["gleason_score"][gleason_score]}/{id}.png', img)
+                except Exception as e:
+                    not_found_train.append(id)
+        print(f"INFO: Not images found in train: {len(not_found_train)}")
+        
+    if not train: 
+        x_tot,x2_tot = [], []
+        with zipfile.ZipFile(OUT_TEST, 'w') as img_out,\
+         zipfile.ZipFile(OUT_MASKS_TEST, 'w') as mask_out:
+            for gleason_score, id in enumerate(tqdm(ids)):
+                try:
+                    img = skimage.io.MultiImage(os.path.join(TRAIN,id+'.tiff'))[1]
+                    mask = skimage.io.MultiImage(os.path.join(MASKS,id+'_mask.tiff'))[1]
+                    tiles = tile(img,mask)
+                    img = mosaic(tiles)                  
+                    x_tot.append((img/255.0).reshape(-1,3).mean(0))
+                    x2_tot.append(((img/255.0)**2).reshape(-1,3).mean(0)) 
+                    # If read with PIL RGB turns into BGR
+                    img = cv2.imencode('.png',cv2.cvtColor(img, cv2.COLOR_RGB2BGR))[1]
+                    # Uncomment to classify by ISUP GRADE 
+                    # img_out.writestr(f'test/ISUP_GRADE_{train_dataset["isup_grade"][isup_grade]}/{id}_{idx}.png', img)
+                    img_out.writestr(f'test/GLEASON_SCORE_{test_dataset["gleason_score"][gleason_score]}/{id}.png', img)
+                except Exception as e:
+                    not_found_test.append(id)
+
+        print(f"INFO: Not images found in test: {len(not_found_test)}")
+
+
+
+generate_dataset(train_IDs, train=True)
