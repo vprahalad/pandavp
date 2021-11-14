@@ -1,6 +1,12 @@
 !pip install numpy
+!pip install -U scikit-learn
+!pip install matplotlib
 !pip install pandas
-pip install -U scikit-learn
+!pip install plotly
+!pip install scikit-image
+!pip install tqdm
+
+
 
 # This Python 3 environment comes with many helpful analytics libraries installed
 # It is defined by the kaggle/python Docker image: https://github.com/kaggle/docker-python
@@ -20,6 +26,20 @@ for dirname, _, filenames in os.walk('/kaggle/input'):
 # You can write up to 20GB to the current directory (/kaggle/working/) that gets preserved as output when you create a version using "Save & Run All" 
 # You can also write temporary files to /kaggle/temp/, but they won't be saved outside of the current session
 
+import matplotlib.pyplot as plt
+import matplotlib
+import skimage.io
+
+
+
+TRAIN = '../tiffies/'
+MASKS = '../masks/'
+OUT_TRAIN = 'train.zip'
+OUT_TEST = 'test.zip'
+OUT_MASKS_TRAIN = 'masks_train.zip'
+OUT_MASKS_TEST = 'masks_test.zip'
+
+
 
 # read in the training set
 train = pd.read_csv("train.csv")
@@ -27,6 +47,7 @@ train = pd.read_csv("train.csv")
 # Check for negative labels: if negative, convert to 0+0
 train[train["gleason_score"] == "negative"]
 train["gleason_score"] = train["gleason_score"].apply(lambda x: "0+0" if x == "negative" else x)
+
 
 
 # Convert data into an array
@@ -37,6 +58,8 @@ train.drop([7273],inplace=True)
 labels = info[:,3]
 # Take the other 3 columns
 features = info[:, :3]
+
+
 
 X = features
 Y = labels
@@ -49,17 +72,16 @@ X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size = 0.20, rand
 
 
 X_train = pd.DataFrame(X_train, columns=["image_id", "data_provider", "isup_grade"])
-
 X_train
 
-'''
 X_train["gleason_score"] = Y_train
 
 X_test = pd.DataFrame(X_test, columns=["image_id", "data_provider", "isup_grade"])
 X_test["gleason_score"] = Y_test
 
 train_eda = X_train.groupby("gleason_score").count()["image_id"].reset_index().sort_values(by="image_id", ascending=False)
-train_eda.style.background_gradient(cmap="Greens")'''
+train_eda.style.background_gradient(cmap="Greens")
+
 
 
 
@@ -70,11 +92,15 @@ fig = px.pie(df, values='image_id', names='gleason_score')
 fig.show()
 
 
+
+
+
 X_train = pd.DataFrame(X_train, columns=["image_id", "data_provider", "isup_grade", "gleason_score"])
 X_test = pd.DataFrame(X_test, columns=["image_id", "data_provider", "isup_grade", "gleason_score"])
 
 X_train.to_csv("./training.csv")
 X_test.to_csv("./testing.csv")
+
 
 
 
@@ -105,8 +131,6 @@ def tile(img, mask):
 
 
 
-#************ UP UNTIL HERE IT WORKS!
-
 
 train_dataset = pd.read_csv("./training.csv", usecols=["image_id", "data_provider", "isup_grade", "gleason_score"])
 test_dataset = pd.read_csv("./testing.csv", usecols=["image_id", "data_provider", "isup_grade", "gleason_score"])
@@ -114,18 +138,20 @@ test_dataset = pd.read_csv("./testing.csv", usecols=["image_id", "data_provider"
 f, ax = plt.subplots(4,4, figsize=(10, 10))
 
 # Mapping to the original dataset
-#img = skimage.io.MultiImage(os.path.join(tiffies, "0005f7aaab2800f6170c399693a96917"+'.tiff'))[1]
-img = skimage.io("tiffies/0005f7aaab2800f6170c399693a96917.tiff")[1]
+img = skimage.io.MultiImage(os.path.join(TRAIN, "0005f7aaab2800f6170c399693a96917"+'.tiff'))[1]
+#img = skimage.io("tiffies/0005f7aaab2800f6170c399693a96917.tiff")[1]
 
-#mask = skimage.io.MultiImage(os.path.join(MASKS,"5801d2195cdcd8d336e8fc097c51a788"+'_mask.tiff'))[1]
-mask = skimage.io("masks/0005f7aaab2800f6170c399693a96917_mask.tiff")[1]
+mask = skimage.io.MultiImage(os.path.join(MASKS, "5801d2195cdcd8d336e8fc097c51a788"+'_mask.tiff'))[1]
+#mask = skimage.io("masks/0005f7aaab2800f6170c399693a96917_mask.tiff")[1]
 
 tiles = tile(img, mask)
 for t in range(len(tiles)):
     ax[t//4, t%4].imshow(tiles[t]["img"]) # Displaying Image    
     ax[t//4, t%4].axis('off')   
-
-
+    
+    
+    
+    
 id_train = train_dataset["image_id"][163]
 id_test = test_dataset["image_id"][163]
 
@@ -169,6 +195,11 @@ tiles = tile(img, mask)
 mosaic_img = mosaic(tiles)
 plt.title(f"ID: {id_train}")
 plt.imshow(mosaic_img)
+
+
+
+
+
 
 
 train_IDs = train_dataset["image_id"]
@@ -223,5 +254,8 @@ def generate_dataset(ids, train=True):
         print(f"INFO: Not images found in test: {len(not_found_test)}")
 
 
+        
+import zipfile
+from tqdm import tqdm
 
 generate_dataset(train_IDs, train=True)
